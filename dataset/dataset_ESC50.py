@@ -191,11 +191,11 @@ class ESC50(data.Dataset):
                 sample_rate=config.sr,
                 n_fft=1024,
                 hop_length=config.hop_length,
-                n_mels=config.n_mels
+                n_mels=config.n_mels,
+                f_min=0.0,
+                f_max=(config.sr / 2.0),  # ensure we only build filters up to Nyquist
             )
-            # produces [1, n_mels, T] in power scale:
-            mel_power = melspec_transform(wave_copy)  # FloatTensor [1, n_mels, T]
-            # convert power spectrogram to decibels exactly like librosa.power_to_db:
+            mel_power = melspec_transform(wave_copy)  # [1, n_mels, T]
             db_transform = torchaudio.transforms.AmplitudeToDB(stype='power')
             feat = db_transform(mel_power)  # [1, n_mels, T]
 
