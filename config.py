@@ -18,7 +18,7 @@ sr = 44100
 n_mels = 128
 hop_length = 512
 #n_mfcc = 42
-n_fft=1024,
+n_fft=1024
 # The number of time‐bins in the final spectrograms.
 # With sr=44100, hop_length=512, 5 seconds audio ≈ floor((44100*5)/512) = 430 frames; round up to 431 if padded to full.
 time_frames = 431
