@@ -9,6 +9,7 @@ import datetime
 from tqdm import tqdm
 import sys
 from functools import partial
+from torch.optim import AdamW
 
 from models.model_classifier import AudioResNet12
 from models.utils import EarlyStopping, Tee
@@ -196,10 +197,13 @@ if __name__ == "__main__":
             # Define a loss function and optimizer
             criterion = nn.CrossEntropyLoss().to(device)
 
-            optimizer = torch.optim.SGD(model.parameters(),
-                                        lr=config.lr,
-                                        momentum=0.9,
-                                        weight_decay=config.weight_decay)
+            optimizer = AdamW(
+                model.parameters(),
+                lr=config.lr,
+                weight_decay=config.weight_decay,
+                betas=(0.9, 0.999),  # default Betas for AdamW
+                eps=1e-8  # default epsilon
+            )
 
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                         step_size=config.step_size,

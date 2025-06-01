@@ -36,15 +36,16 @@ num_workers = 2
 # for local Windows or Linux machine
 # num_workers = 6#16
 persistent_workers = True
+pin_memory=True
 epochs = 200
 #epochs = 1
 # early stopping after epochs with no improvement
 patience = 20
-lr = 1e-4
+lr = 3e-4
 weight_decay = 1e-3
 warm_epochs = 10
 gamma = 0.8
-step_size = 5
+step_size = 3
 
 # ### TESTING
 # model checkpoints loaded for testing
