@@ -37,7 +37,7 @@ num_workers = 2
 # num_workers = 6#16
 persistent_workers = True
 pin_memory=True
-epochs = 150 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
+epochs = 200 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
 #epochs = 1
 # early stopping after epochs with no improvement
 patience = 20 # i have no patience
@@ -45,7 +45,7 @@ lr = 3e-4
 weight_decay = 2e-3
 warm_epochs = 10
 gamma = 0.9 # more gentle decay
-step_size = 3
+step_size = 5
 
 # ### TESTING
 # model checkpoints loaded for testing
