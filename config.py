@@ -18,13 +18,12 @@ sr = 44100
 n_mels = 128
 hop_length = 512
 #n_mfcc = 42
+# The number of time‐bins in the final spectrograms.
+# With sr=44100, hop_length=512, 5 seconds audio ≈ floor((44100*5)/512) = 430 frames; round up to 431 if padded to full.
+time_frames = 431
 
-model_constructor = "AudioMLP(n_steps=431,\
-n_mels=config.n_mels,\
-hidden1_size=512,\
-hidden2_size=128,\
-output_size=config.n_classes,\
-time_reduce=1)"
+model_constructor = "AudioResNet12(n_mels=config.n_mels, time_frames=config.time_frames, num_classes=config.n_classes)"
+
 
 # ###TRAINING
 # ratio to split off from training data
