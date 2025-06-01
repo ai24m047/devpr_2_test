@@ -172,6 +172,13 @@ class ESC50(data.Dataset):
         class_id = int(base.split('-')[-1])
 
         # --- (6) Feature extraction using torchaudio ---
+
+        # First, sanity‐check that we never request more mel filters
+        # than there are FFT frequency bins (n_fft//2 + 1 = 513).
+
+        assert config.n_mels <= (1024 // 2 + 1), \
+            f"config.n_mels={config.n_mels} must be ≤ (n_fft//2 + 1)=513"
+
         if self.n_mfcc:
             # (6a) MFCC path
             # torchaudio.transforms.MFCC outputs shape [channel, n_mfcc, time]
@@ -180,16 +187,19 @@ class ESC50(data.Dataset):
                 n_mfcc=self.n_mfcc,
                 melkwargs={
                     'n_mels': config.n_mels,
-                    'n_fft': 1024,
-                    'hop_length': config.hop_length
+                    'n_fft': config.n_fft,
+                    'hop_length': config.hop_length,
+                    'f_min': 0.0,
+                    'f_max': config.sr / 2.0
                 }
             )
             feat = mfcc_transform(wave_copy)  # [1, n_mfcc, T]
         else:
             # (6b) MelSpectrogram + AmplitudeToDB path
+
             melspec_transform = torchaudio.transforms.MelSpectrogram(
                 sample_rate=config.sr,
-                n_fft=1024,
+                n_fft=config.n_fft,
                 hop_length=config.hop_length,
                 n_mels=config.n_mels,
                 f_min=0.0,
