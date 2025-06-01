@@ -10,6 +10,7 @@ from tqdm import tqdm
 import sys
 from functools import partial
 from torch.optim import AdamW
+from torch.cuda.amp import autocast, GradScaler
 
 from models.model_classifier import AudioResNet12
 from models.utils import EarlyStopping, Tee
@@ -61,23 +62,23 @@ def train_epoch():
     losses = []
     corrects = 0
     samples_count = 0
+
     for _, x, label in tqdm(train_loader, unit='bat', disable=config.disable_bat_pbar, position=0):
         x = x.float().to(device)
         y_true = label.to(device)
 
-        # the forward pass through the model
-        y_prob = model(x)
+     # ---- Forward pass under autocast ----
+        with autocast():
+            y_prob = model(x)
+            loss = criterion(y_prob, y_true)
 
-        # we could also use 'F.one_hot(y_true)' for 'y_true', but this would be slower
-        loss = criterion(y_prob, y_true)
-        # reset the gradients to zero - avoids accumulation
+    # ---- Backward + optimizer step via GradScaler ----
         optimizer.zero_grad()
-        # compute the gradient with backpropagation
-        loss.backward()
-        losses.append(loss.item())
-        # minimize the loss via the gradient - adapts the model parameters
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
+        losses.append(loss.item())
         y_pred = torch.argmax(y_prob, dim=1)
         corrects += (y_pred == y_true).sum().item()
         samples_count += y_true.shape[0]
@@ -204,6 +205,8 @@ if __name__ == "__main__":
                 betas=(0.9, 0.999),  # default Betas for AdamW
                 eps=1e-8  # default epsilon
             )
+            # instantiate GradScaler for AMP implementation
+            scaler = GradScaler()
 
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                         step_size=config.step_size,
