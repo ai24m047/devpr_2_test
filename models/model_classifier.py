@@ -261,6 +261,7 @@ class AudioResNet12(nn.Module):
         # ----------------------------------------------------------------------
         # (6) Global average pool → flatten → classifier
         # ----------------------------------------------------------------------
+        out = F.dropout2d(out, p=0.2, training=self.training)
         out = self.global_avg_pool(out)  # [B, 512, 1, 1]
         out = torch.flatten(out, 1)       # [B, 512]
         out = self.classifier(out)        # [B, num_classes]
