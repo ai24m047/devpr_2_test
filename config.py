@@ -40,11 +40,11 @@ pin_memory=True
 epochs = 150 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
 #epochs = 1
 # early stopping after epochs with no improvement
-patience = 5 # i have no patience
+patience = 20 # i have no patience
 lr = 3e-4
-weight_decay = 1e-3
+weight_decay = 2e-3
 warm_epochs = 10
-gamma = 0.8 # more gentle decay
+gamma = 0.9 # more gentle decay
 step_size = 3
 
 # ### TESTING
