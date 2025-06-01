@@ -43,8 +43,8 @@ epochs = 150 # model + optimizer combo apparently does not need that many epochs
 patience = 5 # i have no patience
 lr = 3e-4
 weight_decay = 1e-3
-warm_epochs = 15 # some more warmup time
-gamma = 0.9 # more gentle decay
+warm_epochs = 10
+gamma = 0.8 # more gentle decay
 step_size = 3
 
 # ### TESTING
