@@ -148,7 +148,6 @@ class ESC50(data.Dataset):
             waveform = torch.mean(waveform, dim=0, keepdim=True)  # now shape [1, time]
 
         # At this point: waveform is a FloatTensor in [-1.0, +1.0], shape [1, time].
-        # In the old code, we multiplied by 32768 (librosa gave floats in [-1..1]).
         waveform = waveform * 32768.0  # now roughly integer‐scale as before.
 
         # --- (3) Remove any leading/trailing silence exactly as before ---
@@ -161,8 +160,6 @@ class ESC50(data.Dataset):
         # If everything was zero, we just keep waveform as is.
 
         # --- (4) Apply existing "wave_transforms" pipeline ---
-        # The old code expected a NumPy array, but our transforms work on torch.Tensor already.
-        # So we can feed waveform directly into them.
         wave_copy = waveform.clone().squeeze(0)  # shape [time]
         wave_copy = self.wave_transforms(wave_copy)  # crop/pad (returns Tensor [time] or shorter/longer)
         wave_copy = wave_copy.unsqueeze(0)  # restore shape [1, time]
@@ -175,7 +172,7 @@ class ESC50(data.Dataset):
 
         # First, sanity‐check that we never request more mel filters
         # than there are FFT frequency bins (n_fft//2 + 1 = 513).
-
+        # warning still persists at first 1-2 episodes of training
         assert config.n_mels <= (1024 // 2 + 1), \
             f"config.n_mels={config.n_mels} must be ≤ (n_fft//2 + 1)=513"
 
@@ -196,7 +193,6 @@ class ESC50(data.Dataset):
             feat = mfcc_transform(wave_copy)  # [1, n_mfcc, T]
         else:
             # (6b) MelSpectrogram + AmplitudeToDB path
-
             melspec_transform = torchaudio.transforms.MelSpectrogram(
                 sample_rate=config.sr,
                 n_fft=config.n_fft,
@@ -209,13 +205,6 @@ class ESC50(data.Dataset):
             db_transform = torchaudio.transforms.AmplitudeToDB(stype='power')
             feat = db_transform(mel_power)  # [1, n_mels, T]
 
-            # (Optional) If you still want to use the old freq/time masking from transforms.py,
-            # you can do so here. In the old code, they did "log_s = self.spec_transforms(log_s)",
-            # but now feat is already [1, n_mels, T], so you could do:
-            #     feat = transforms.FrequencyMask(max_width=..., numbers=...)(feat)
-            #     feat = transforms.TimeMask(max_width=..., numbers=...)(feat)
-            #
-            # For simplicity, we'll skip that here unless you have explicit masking stages.
 
         # --- (7) Normalize with the global mean/std as before ---
         # Originally, "feat" was a NumPy array or a Torch Tensor created via torch.Tensor(log_s).

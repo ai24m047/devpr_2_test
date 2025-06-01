@@ -147,6 +147,7 @@ if __name__ == "__main__":
     runs_path = config.runs_path
     experiment_root = os.path.join(runs_path, str(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')))
     os.makedirs(experiment_root, exist_ok=True)
+    print("Experiment folder created: " + experiment_root)
 
     # for all folds
     scores = {}

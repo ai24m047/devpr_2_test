@@ -37,10 +37,10 @@ num_workers = 2
 # num_workers = 6#16
 persistent_workers = True
 pin_memory=True
-epochs = 100 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
+epochs = 80 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
 #epochs = 1
 # early stopping after epochs with no improvement
-patience = 10 # i have no patience
+patience = 10 # i have no patience, so far most have stopped improving around 60-70
 lr = 3e-4
 weight_decay = 2e-3
 warm_epochs = 10
@@ -51,5 +51,5 @@ step_size = 5
 # model checkpoints loaded for testing
 test_checkpoints = ['terminal.pt']  # ['terminal.pt', 'best_val_loss.pt']
 # experiment folder used for testing (result from cross validation training)
-#test_experiment = 'results/2025-04-07-00-00'
-test_experiment = 'results/sample-run'
+test_experiment = 'results/2025-06-01-18-47'
+#test_experiment = 'results/sample-run'
