@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import random
+import torch.nn.functional as F
 
 
 # Composes several transforms together.
@@ -23,48 +24,49 @@ def scale(old_value, old_min, old_max, new_min, new_max):
 
 
 class RandomNoise:
-    def __init__(self, min_noise=0.0, max_noise=0.05):  # 0.002, 0.01
-        super(RandomNoise, self).__init__()
-
+    """
+    Adds Gaussian noise directly to the waveform.
+    Noise is generated on the same device & dtype as the input tensor.
+    """
+    def __init__(self, min_noise: float = 0.002, max_noise: float = 0.02, p: float = 1.0):
         self.min_noise = min_noise
         self.max_noise = max_noise
+        self.p = p
 
-    def addNoise(self, wave):
-        noise_val = random.uniform(self.min_noise, self.max_noise)
-        noise = torch.from_numpy(np.random.normal(0, noise_val, wave.shape[0]))
-        noisy_wave = wave + noise
-
-        return noisy_wave
-
-    def __call__(self, x):
-        return self.addNoise(x)
+    def __call__(self, wave: torch.Tensor) -> torch.Tensor:
+        # wave: Tensor of shape [time] (or [1, time]) on some device
+        if random.random() > self.p:
+            return wave
+        noise_amp = random.uniform(self.min_noise, self.max_noise)
+        noise = torch.randn_like(wave) * noise_amp
+        return wave + noise
 
 
 class RandomScale:
-
-    def __init__(self, max_scale: float = 1.25):
-        super(RandomScale, self).__init__()
-
+    """
+    Randomly speeds up or slows down the waveform by linear interpolation.
+    Operates on the same device & dtype as the input tensor.
+    """
+    def __init__(self, min_scale: float = 0.8, max_scale: float = 1.2, p: float = 1.0):
+        self.min_scale = min_scale
         self.max_scale = max_scale
+        self.p = p
 
-    @staticmethod
-    def random_scale(max_scale: float, signal: torch.Tensor) -> torch.Tensor:
-        scaling = np.power(max_scale, np.random.uniform(-1, 1))  # between 1.25**(-1) and 1.25**(1)
-        output_size = int(signal.shape[-1] * scaling)
-        ref = torch.arange(output_size, device=signal.device, dtype=signal.dtype).div_(scaling)
-
-        # ref1 is of size output_size
-        ref1 = ref.clone().type(torch.int64)
-        ref2 = torch.min(ref1 + 1, torch.full_like(ref1, signal.shape[-1] - 1, dtype=torch.int64))
-
-        r = ref - ref1.type(ref.type())
-
-        scaled_signal = signal[..., ref1] * (1 - r) + signal[..., ref2] * r
-
-        return scaled_signal
-
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return self.random_scale(self.max_scale, x)
+    def __call__(self, wave: torch.Tensor) -> torch.Tensor:
+        # wave: Tensor of shape [time]; we’ll interpolate in batch/channel dims
+        if random.random() > self.p:
+            return wave
+        scale = random.uniform(self.min_scale, self.max_scale)
+        # add batch & channel dims for interpolate
+        w = wave.unsqueeze(0).unsqueeze(0)  # shape [1,1,time]
+        new_len = int(w.size(-1) * scale)
+        w2 = F.interpolate(
+            w,
+            size=new_len,
+            mode="linear",
+            align_corners=False
+        )
+        return w2.squeeze()  # back to [time]
 
 
 class RandomCrop:
