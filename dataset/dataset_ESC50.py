@@ -1,6 +1,5 @@
 import torch
 from torch.utils import data
-import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 import requests
 from tqdm import tqdm
@@ -101,9 +100,7 @@ class ESC50(data.Dataset):
                 torch.Tensor,
                 # you can still add RandomScale or other wave-domain augs here
                 transforms.RandomPadding(out_len=out_len),
-                transforms.RandomCrop(out_len=out_len),
-                transforms.RandomScale(max_scale=1.2, p=1.0),
-                transforms.RandomNoise(min_noise=0.002, max_noise=0.02, p=1.0)
+                transforms.RandomCrop(out_len=out_len)
             )
 
             # === spec_transforms for training: add SpecAugment ===
@@ -123,7 +120,7 @@ class ESC50(data.Dataset):
                 torch.Tensor,
                 # disable randomness
                 transforms.RandomPadding(out_len=out_len, train=False),
-                transforms.RandomCrop(out_len=out_len, train=False),
+                transforms.RandomCrop(out_len=out_len, train=False)
             )
 
             self.spec_transforms = transforms.Compose(
@@ -148,12 +145,11 @@ class ESC50(data.Dataset):
         # --- (1) Load audio with torchaudio ---
         # torchaudio.load returns a Tensor [channels, time] and its sample rate.
         waveform, orig_sr = torchaudio.load(path)  # shape: [channels, time]
-        waveform = waveform.to(torch.float32)  # still on CPU
 
         # If the audio was recorded at a different sample rate, resample to config.sr:
         if orig_sr != config.sr:
             resampler = torchaudio.transforms.Resample(orig_freq=orig_sr, new_freq=config.sr)
-            waveform = resampler(waveform)  # CPU resample
+            waveform = resampler(waveform)  # still shape [channels, time]
 
         # --- (2) Convert to mono if multi-channel ---
         # If there is more than 1 channel, just take the mean of channels.
@@ -172,10 +168,10 @@ class ESC50(data.Dataset):
             waveform = waveform[:, time_min: time_max + 1]
         # If everything was zero, we just keep waveform as is.
 
-        # --- (4) Apply existing "wave_transforms" pipeline on GPU ---
-        wave_cpu = waveform.clone().squeeze(0)  # [time] on CPU
-        wave_cpu = self.wave_transforms(wave_cpu)  # still CPU
-        wave = wave_cpu.unsqueeze(0)  # [1, time], still on CPU
+        # --- (4) Apply existing "wave_transforms" pipeline ---
+        wave_copy = waveform.clone().squeeze(0)  # shape [time]
+        wave_copy = self.wave_transforms(wave_copy)  # crop/pad (returns Tensor [time] or shorter/longer)
+        wave_copy = wave_copy.unsqueeze(0)  # restore shape [1, time]
 
         # --- (5) Label extraction: exactly as before ---
         base = file_name.split('.')[0]
@@ -203,7 +199,7 @@ class ESC50(data.Dataset):
                     'f_max': config.sr / 2.0
                 }
             )
-            feat = mfcc_transform(wave)  # [1, n_mfcc, T]
+            feat = mfcc_transform(wave_copy)  # [1, n_mfcc, T]
         else:
             # (6b) MelSpectrogram + AmplitudeToDB path
             melspec_transform = torchaudio.transforms.MelSpectrogram(
@@ -213,8 +209,8 @@ class ESC50(data.Dataset):
                 n_mels=config.n_mels,
                 f_min=0.0,
                 f_max=(config.sr / 2.0),  # ensure we only build filters up to Nyquist
-            ).to(device)
-            mel_power = melspec_transform(wave)  # [1, n_mels, T]
+            )
+            mel_power = melspec_transform(wave_copy)  # [1, n_mels, T]
             db_transform = torchaudio.transforms.AmplitudeToDB(stype='power')
             feat = db_transform(mel_power)  # [1, n_mels, T]
 
@@ -235,61 +231,50 @@ class ESC50(data.Dataset):
         # static, Δ, and Δ²
         feat = torch.cat([feat, delta1, delta2], dim=0)
 
-        # --- (10) Force fixed time dimension ---
-        # feat: Tensor [3, n_mels, T], but we need T == config.time_frames
-        _, _, T = feat.shape
-        target_T = config.time_frames
-
-        if T < target_T:
-            pad_amt = target_T - T
-            # pad on the right in the time dimension
-            feat = F.pad(feat, (0, pad_amt), mode="constant", value=0)
-        elif T > target_T:
-            feat = feat[:, :, :target_T]
-
         return file_name, feat, class_id
 
     def _compute_global_stats(self):
-        # build GPU transforms
-        melspec_t = torchaudio.transforms.MelSpectrogram(
-            sample_rate=config.sr,
-            n_fft=config.n_fft,
-            hop_length=config.hop_length,
-            n_mels=config.n_mels,
-        ).to(device)
-        db_t = torchaudio.transforms.AmplitudeToDB(stype='power').to(device)
+        """
+        Compute mean & std of the *static* log-Mel feature over all
+        *training* files in this fold (before delta stacking).
+        Returns two scalars that can broadcast over [1, n_mels, T].
+        """
+        sum_ = 0.0
+        sum_sq = 0.0
+        count = 0
 
-        sum_, sum_sq, count = 0.0, 0.0, 0
-
+        # iterate only over training subset
         for fname in tqdm(self.file_names, desc="Calc mean/std"):
             path = os.path.join(self.root, fname)
             waveform, sr = torchaudio.load(path)
-            waveform = waveform.to(torch.float32)
-
             if sr != config.sr:
-                resampler = torchaudio.transforms.Resample(sr, config.sr)
-                waveform = resampler(waveform)
-
+                waveform = torchaudio.transforms.Resample(sr, config.sr)(waveform)
             if waveform.size(0) > 1:
                 waveform = waveform.mean(dim=0, keepdim=True)
 
-            # wave transforms
+            # apply wave transforms & spectrogram (exactly as in __getitem__)
             wave = self.wave_transforms(waveform.squeeze(0)).unsqueeze(0)
+            melspec = torchaudio.transforms.MelSpectrogram(
+                sample_rate=config.sr,
+                n_fft=config.n_fft,
+                hop_length=config.hop_length,
+                n_mels=config.n_mels,
+                f_min=0.0,
+                f_max=config.sr / 2.0,
+            )(wave)
+            feat = torchaudio.transforms.AmplitudeToDB(stype='power')(melspec)
 
-            # GPU mel + dB
-            feat = db_t(melspec_t(wave))
-
-            sum_ += feat.sum().item()
+            # accumulate
+            sum_   += feat.sum().item()
             sum_sq += (feat ** 2).sum().item()
-            count += feat.numel()
+            count  += feat.numel()
 
         mean = sum_ / count
-        std = (sum_sq / count - mean ** 2) ** 0.5
-        return (
-            torch.tensor(mean, device=device).view(1, 1, 1),
-            torch.tensor(std, device=device).view(1, 1, 1)
-        )
+        var  = sum_sq / count - mean**2
+        std  = float(var**0.5)
 
+        # return as tensors [1,1,1] so they broadcast over [1, n_mels, T]
+        return torch.tensor(mean).view(1,1,1), torch.tensor(std).view(1,1,1)
 
 def get_global_stats(data_path):
     res = []

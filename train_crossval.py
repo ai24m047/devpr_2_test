@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import dataloader
-import torch.multiprocessing as mp
 import pandas as pd
 import numpy as np
 import os
@@ -38,7 +37,7 @@ def test(model, dataloader, criterion, device):
     with torch.no_grad():
         # no gradient computation needed
         for k, x, label in tqdm(dataloader, unit='bat', disable=config.disable_bat_pbar, position=0):
-            x = x.to(device, dtype=torch.float32)
+            x = x.float().to(device)
             y_true = label.to(device)
 
             # the forward pass through the model
@@ -66,7 +65,7 @@ def train_epoch():
     samples_count = 0
 
     for _, x, label in tqdm(train_loader, unit='bat', disable=config.disable_bat_pbar, position=0):
-        x = x.to(device, dtype=torch.float32)
+        x = x.float().to(device)
         y_true = label.to(device)
 
      # ---- Forward pass under autocast ----
@@ -139,8 +138,6 @@ def make_model():
 
 
 if __name__ == "__main__":
-    mp.set_start_method("spawn", force=True)
-
     data_path = config.esc50_path
     use_cuda = torch.cuda.is_available()
     if use_cuda:
@@ -165,7 +162,7 @@ if __name__ == "__main__":
     # expensive!
     #global_stats = get_global_stats(data_path)
     # for spectrograms
-    # print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
+    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     for test_fold in config.test_folds:
         experiment = os.path.join(experiment_root, f'{test_fold}')
         if not os.path.exists(experiment):
