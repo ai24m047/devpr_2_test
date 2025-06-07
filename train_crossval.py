@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sympy.abc import alpha
 from torch.utils.data import dataloader
 import pandas as pd
 import numpy as np
@@ -15,7 +14,7 @@ from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR, SequentialLR
 from torch.amp import GradScaler, autocast
 
 from models.model_classifier import AudioResNet12
-from models.utils import EarlyStopping, Tee, mixup_criterion, mixup_data
+from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 import config
 
@@ -68,14 +67,11 @@ def train_epoch():
     for _, x, label in tqdm(train_loader, unit='bat', disable=config.disable_bat_pbar, position=0):
         x = x.float().to(device)
         y_true = label.to(device)
-        # apply mixup
-        x, y_a, y_b, lam = mixup_data(x, y_true, alpha=0.2, device=device)
 
      # ---- Forward pass under autocast ----
         with autocast("cuda"):
             y_prob = model(x)
-            # loss = criterion(y_prob, y_true) # removed for mixup criterion
-            loss = mixup_criterion(criterion, y_prob, y_a, y_b, lam)
+            loss = criterion(y_prob, y_true)
 
     # ---- Backward + optimizer step via GradScaler ----
         optimizer.zero_grad()
@@ -84,12 +80,8 @@ def train_epoch():
         scaler.update()
 
         losses.append(loss.item())
-
-        # Compute “mixup accuracy” by counting how often we predict A vs B
         y_pred = torch.argmax(y_prob, dim=1)
-        # lam * (#pred==y_a) + (1-lam) * (#pred==y_b)
-        corrects += lam * (y_pred == y_a).sum().item() \
-                    + (1 - lam) * (y_pred == y_b).sum().item()
+        corrects += (y_pred == y_true).sum().item()
         samples_count += y_true.shape[0]
 
     acc = corrects / samples_count
@@ -239,8 +231,6 @@ if __name__ == "__main__":
             )
             # instantiate GradScaler for AMP implementation
             scaler = GradScaler()
-
-            # … after you define optimizer and scaler …
 
             # 1. Warm-up schedule: multiply LR by `gamma` every `step_size` epochs
             warmup_scheduler = StepLR(

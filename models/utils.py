@@ -2,25 +2,7 @@ import os
 import sys
 import numpy as np
 import torch
-import torch.nn.functional as F
 
-# mixup for accuracy boost
-# as seen in [Zhang et al. 2017] https://arxiv.org/pdf/1710.09412
-def mixup_data(x, y, alpha=0.4, device='cuda'):
-    '''Returns mixed inputs, pairs of targets, and lambda'''
-    if alpha > 0:
-        lam = torch.distributions.Beta(alpha, alpha).sample().item()
-    else:
-        lam = 1.0
-    batch_size = x.size()[0]
-    index = torch.randperm(batch_size, device=device)
-
-    mixed_x = lam * x + (1 - lam) * x[index, :]
-    y_a, y_b = y, y[index]
-    return mixed_x, y_a, y_b, lam
-
-def mixup_criterion(criterion, pred, y_a, y_b, lam):
-    return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 # clone stdout to file. Optionally process carriage 'proc_cr' return to handle tqdm bars as displayed in stdout.
 class Tee(object):

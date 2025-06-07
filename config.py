@@ -42,7 +42,7 @@ prefetch_factor=4,     # fetch 2 batches ahead
 epochs = 80 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
 #epochs = 1
 # early stopping after epochs with no improvement
-patience = 10 # i have no patience, so far most have stopped improving around 60-70
+patience =12 # i have no patience, so far most have stopped improving around 60-70
 lr = 3e-4
 weight_decay = 1e-4
 warm_epochs = 10
