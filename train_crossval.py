@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sympy.abc import alpha
 from torch.utils.data import dataloader
 import pandas as pd
 import numpy as np
@@ -14,7 +15,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.amp import GradScaler, autocast
 
 from models.model_classifier import AudioResNet12
-from models.utils import EarlyStopping, Tee
+from models.utils import EarlyStopping, Tee, mixup_criterion, mixup_data
 from dataset.dataset_ESC50 import ESC50
 import config
 
@@ -67,11 +68,14 @@ def train_epoch():
     for _, x, label in tqdm(train_loader, unit='bat', disable=config.disable_bat_pbar, position=0):
         x = x.float().to(device)
         y_true = label.to(device)
+        # apply mixup
+        x, y_a, y_b, lam = mixup_data(x, y_true, alpha=0.3, device=device)
 
      # ---- Forward pass under autocast ----
         with autocast("cuda"):
             y_prob = model(x)
-            loss = criterion(y_prob, y_true)
+            # loss = criterion(y_prob, y_true) # removed for mixup criterion
+            loss = mixup_criterion(criterion, y_prob, y_a, y_b, lam)
 
     # ---- Backward + optimizer step via GradScaler ----
         optimizer.zero_grad()
