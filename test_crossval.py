@@ -7,9 +7,8 @@ import os
 import argparse
 
 from dataset.dataset_ESC50 import ESC50, download_extract_zip
-from train_crossval import test, make_model, global_stats
+from train_crossval import test, make_model
 import config
-
 
 if __name__ == "__main__":
     # optional: the test cross validation path can be specified from command line
@@ -28,7 +27,7 @@ if __name__ == "__main__":
         torch.use_deterministic_algorithms(True)
         torch.manual_seed(0)
         # for debugging only, uncomment
-        #check_data_reproducibility = True
+        # check_data_reproducibility = True
 
     # digits for logging
     float_fmt = ".3f"
@@ -37,15 +36,14 @@ if __name__ == "__main__":
     if not os.path.isdir(experiment_root):
         print('download model params')
         download_extract_zip(
-            #url='https://cloud.technikum-wien.at/s/9HTN27EADZXGJ72/download/sample-run.zip',
+            # url='https://cloud.technikum-wien.at/s/9HTN27EADZXGJ72/download/sample-run.zip',
             url='https://cloud.technikum-wien.at/s/PiHsFtnB69cqxPE/download/sample-run.zip',
             file_path=experiment_root + '.zip',
         )
 
-
     # instantiate model
     print('*****')
-    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
+    # print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     model = make_model()
     # same multi-GPU wrap as in training
     if use_cuda and torch.cuda.device_count() > 1:
@@ -62,14 +60,30 @@ if __name__ == "__main__":
     for test_fold in config.test_folds:
         experiment = os.path.join(experiment_root, f'{test_fold}')
 
-        test_loader = torch.utils.data.DataLoader(ESC50(subset="test", test_folds={test_fold},
-                                                        global_mean_std=global_stats[test_fold - 1],
-                                                        root=data_path, download=True),
-                                                  batch_size=config.batch_size,
-                                                  shuffle=False,
-                                                  num_workers=0,  # config.num_workers,
-                                                  drop_last=False,
-                                                  )
+        # --- 1) Compute train‐split stats for this fold ---
+        train_set = ESC50(subset="train",
+                          test_folds={test_fold},
+                          root=data_path,
+                          download=True,
+                          compute_stats=True)
+        mean_val, std_val = train_set.global_mean, train_set.global_std  # :contentReference[oaicite:0]{index=0}
+
+        # --- 2) Build test loader and inject those stats ---
+        test_set = ESC50(subset="test",
+                         test_folds={test_fold},
+                         root=data_path,
+                         download=True,
+                         compute_stats=False)
+        test_set.global_mean = mean_val
+        test_set.global_std = std_val
+        test_loader = torch.utils.data.DataLoader(
+            test_set,
+            batch_size=config.batch_size,
+            shuffle=False,
+            num_workers=0,
+            drop_last=False,
+        )
+
         # DEBUG: check if testdata is deterministic (multiple testset read, time consuming)
         if check_data_reproducibility:
             is_det_file = all([(a[0] == b[0]) for a, b in zip(test_loader, test_loader)])
