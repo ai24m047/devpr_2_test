@@ -1,5 +1,6 @@
 import torch
 from torch.utils import data
+import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 import requests
 from tqdm import tqdm
@@ -235,6 +236,18 @@ class ESC50(data.Dataset):
         # --- (9) Stack into 3 channels: [3, n_mels, T] ---
         # static, Δ, and Δ²
         feat = torch.cat([feat, delta1, delta2], dim=0)
+
+        # --- (10) Force fixed time dimension ---
+        # feat: Tensor [3, n_mels, T], but we need T == config.time_frames
+        _, _, T = feat.shape
+        target_T = config.time_frames
+
+        if T < target_T:
+            pad_amt = target_T - T
+            # pad on the right in the time dimension
+            feat = F.pad(feat, (0, pad_amt), mode="constant", value=0)
+        elif T > target_T:
+            feat = feat[:, :, :target_T]
 
         return file_name, feat, class_id
 
