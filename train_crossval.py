@@ -69,7 +69,7 @@ def train_epoch():
         x = x.float().to(device)
         y_true = label.to(device)
         # apply mixup
-        x, y_a, y_b, lam = mixup_data(x, y_true, alpha=0.3, device=device)
+        x, y_a, y_b, lam = mixup_data(x, y_true, alpha=0.2, device=device)
 
      # ---- Forward pass under autocast ----
         with autocast("cuda"):
@@ -84,8 +84,12 @@ def train_epoch():
         scaler.update()
 
         losses.append(loss.item())
+
+        # Compute “mixup accuracy” by counting how often we predict A vs B
         y_pred = torch.argmax(y_prob, dim=1)
-        corrects += (y_pred == y_true).sum().item()
+        # lam * (#pred==y_a) + (1-lam) * (#pred==y_b)
+        corrects += lam * (y_pred == y_a).sum().item() \
+                    + (1 - lam) * (y_pred == y_b).sum().item()
         samples_count += y_true.shape[0]
 
     acc = corrects / samples_count
