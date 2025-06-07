@@ -241,7 +241,7 @@ class ESC50(data.Dataset):
         *training* files in this fold (before delta stacking).
         Returns two tensors of shape [1,1,1] that broadcast over [1, n_mels, T].
         """
-        # build spectrogram + dB transforms once, on the correct device
+        # Prepare your GPU transforms once:
         melspec_transform = torchaudio.transforms.MelSpectrogram(
             sample_rate=config.sr,
             n_fft=config.n_fft,
@@ -259,39 +259,44 @@ class ESC50(data.Dataset):
         for fname in tqdm(self.file_names, desc="Calc mean/std"):
             path = os.path.join(self.root, fname)
 
-            # --- load & cast to float32 on GPU/CPU device ---
-            waveform, sr = torchaudio.load(path)  # -> DoubleTensor CPU
-            waveform = waveform.to(device=device, dtype=torch.float32)
+            # 1) LOAD on CPU & cast to float32
+            waveform, sr = torchaudio.load(path)  # -> CPU DoubleTensor
+            waveform = waveform.to(dtype=torch.float32)  # -> CPU FloatTensor
 
-            # --- resample if needed, on the same device ---
+            # 2) RESAMPLE on CPU if needed
             if sr != config.sr:
-                resampler = torchaudio.transforms.Resample(sr, config.sr).to(device)
-                waveform = resampler(waveform)
+                resampler = torchaudio.transforms.Resample(sr, config.sr)
+                waveform = resampler(waveform)  # still CPU FloatTensor
 
-            # --- mono if multi-channel ---
+            # 3) MONO mix-down on CPU
             if waveform.size(0) > 1:
-                waveform = waveform.mean(dim=0, keepdim=True)
+                waveform = waveform.mean(dim=0, keepdim=True)  # still CPU
 
-            # --- apply your existing wave_transforms (on CPU) then move to device ---
-            wave = self.wave_transforms(waveform.squeeze(0))  # -> Tensor CPU
-            wave = wave.unsqueeze(0).to(device)  # -> FloatTensor on device
+            # 4) APPLY wave_transforms on CPU
+            wave_cpu = self.wave_transforms(waveform.squeeze(0))  # -> CPU FloatTensor [time]
+            wave_cpu = wave_cpu.unsqueeze(0)  # -> CPU [1, time]
 
-            # --- compute MelSpectrogram + dB on device ---
-            melspec = melspec_transform(wave)  # [1, n_mels, T]
-            feat = db_transform(melspec)  # [1, n_mels, T]
+            # 5) MOVE to GPU for spectrogram
+            wave = wave_cpu.to(device)  # -> GPU FloatTensor
 
-            # --- accumulate for global mean/std ---
+            # 6) MEL + DB on GPU
+            melspec = melspec_transform(wave)  # -> GPU [1, n_mels, T]
+            feat = db_transform(melspec)  # -> GPU [1, n_mels, T]
+
+            # 7) ACCUMULATE stats (back on CPU via .item())
             sum_ += feat.sum().item()
             sum_sq += (feat ** 2).sum().item()
             count += feat.numel()
 
+        # 8) FINALIZE mean/std and return as GPU tensors
         mean = sum_ / count
         var = sum_sq / count - mean ** 2
         std = float(var ** 0.5)
 
-        # return as tensors [1,1,1] so they broadcast properly
-        return torch.tensor(mean, device=device).view(1, 1, 1), torch.tensor(std, device=device).view(1, 1, 1)
-
+        return (
+            torch.tensor(mean, device=device).view(1, 1, 1),
+            torch.tensor(std, device=device).view(1, 1, 1)
+        )
 
 def get_global_stats(data_path):
     res = []
