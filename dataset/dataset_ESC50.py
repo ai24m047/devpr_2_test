@@ -10,6 +10,7 @@ import numpy as np
 
 import torchaudio
 from torchaudio.functional import compute_deltas
+from torchaudio.transforms import FrequencyMasking, TimeMasking
 import config
 from . import transforms
 
@@ -97,17 +98,20 @@ class ESC50(data.Dataset):
             # transforms can be applied on wave and spectral representation
             self.wave_transforms = transforms.Compose(
                 torch.Tensor,
-                #transforms.RandomScale(max_scale=1.25),
+                # you can still add RandomScale or other wave-domain augs here
                 transforms.RandomPadding(out_len=out_len),
                 transforms.RandomCrop(out_len=out_len)
             )
 
+            # === spec_transforms for training: add SpecAugment ===
             self.spec_transforms = transforms.Compose(
-                # to Tensor and prepend singleton dim
-                #lambda x: torch.Tensor(x).unsqueeze(0),
-                # lambda non-pickleable, problem on windows, replace with partial function
+                # (1) to Tensor, (2) add channel dim
                 torch.Tensor,
                 partial(torch.unsqueeze, dim=0),
+                # (3) zero-out up to 15 random mel bins
+                FrequencyMasking(freq_mask_param=15),
+                # (4) zero-out up to 35 random time frames
+                TimeMasking(time_mask_param=35),
             )
 
         else:

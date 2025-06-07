@@ -10,6 +10,7 @@ from tqdm import tqdm
 import sys
 from functools import partial
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.amp import GradScaler, autocast
 
 from models.model_classifier import AudioResNet12
@@ -231,9 +232,11 @@ if __name__ == "__main__":
             # instantiate GradScaler for AMP implementation
             scaler = GradScaler()
 
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                                        step_size=config.step_size,
-                                                        gamma=config.gamma)
+            scheduler = CosineAnnealingLR(
+                optimizer,
+                T_max=config.epochs,  # one full cosine cycle over all epochs
+                eta_min=1e-6  # end-of-schedule minimum LR
+            )
 
             # fit the model using only training and validation data, no testing data allowed here
             print()

@@ -18,7 +18,7 @@ sr = 44100
 n_mels = 64
 hop_length = 512
 #n_mfcc = 42
-n_fft=512
+n_fft=1024
 # The number of time‐bins in the final spectrograms.
 # With sr=44100, hop_length=512, 5 seconds audio ≈ floor((44100*5)/512) = 430 frames; round up to 431 if padded to full.
 time_frames = 431
@@ -42,8 +42,8 @@ prefetch_factor=4,     # fetch 2 batches ahead
 epochs = 80 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
 #epochs = 1
 # early stopping after epochs with no improvement
-patience = 13 # i have no patience, so far most have stopped improving around 60-70
-lr = 1e-3
+patience = 8 # i have no patience, so far most have stopped improving around 60-70
+lr = 3e-4
 weight_decay = 1e-4
 warm_epochs = 10
 gamma = 0.9 # more gentle decay
@@ -53,5 +53,5 @@ step_size = 5
 # model checkpoints loaded for testing
 test_checkpoints = ['terminal.pt']  # ['terminal.pt', 'best_val_loss.pt']
 # experiment folder used for testing (result from cross validation training)
-test_experiment = 'results/2025-06-01-18-47'
-#test_experiment = 'results/sample-run'
+#test_experiment = 'results/2025-06-01-18-47'
+test_experiment = 'results/sample-run'
