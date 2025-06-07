@@ -100,9 +100,7 @@ class ESC50(data.Dataset):
                 torch.Tensor,
                 # you can still add RandomScale or other wave-domain augs here
                 transforms.RandomPadding(out_len=out_len),
-                transforms.RandomCrop(out_len=out_len),
-                transforms.RandomScale(max_scale=1.2),
-                transforms.RandomNoise(min_noise=0.002, max_noise=0.02)
+                transforms.RandomCrop(out_len=out_len)
             )
 
             # === spec_transforms for training: add SpecAugment ===
@@ -239,64 +237,44 @@ class ESC50(data.Dataset):
         """
         Compute mean & std of the *static* log-Mel feature over all
         *training* files in this fold (before delta stacking).
-        Returns two tensors of shape [1,1,1] that broadcast over [1, n_mels, T].
+        Returns two scalars that can broadcast over [1, n_mels, T].
         """
-        # Prepare your GPU transforms once:
-        melspec_transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=config.sr,
-            n_fft=config.n_fft,
-            hop_length=config.hop_length,
-            n_mels=config.n_mels,
-            f_min=0.0,
-            f_max=config.sr / 2.0,
-        ).to(device)
-        db_transform = torchaudio.transforms.AmplitudeToDB(stype='power').to(device)
-
         sum_ = 0.0
         sum_sq = 0.0
         count = 0
 
+        # iterate only over training subset
         for fname in tqdm(self.file_names, desc="Calc mean/std"):
             path = os.path.join(self.root, fname)
-
-            # 1) LOAD on CPU & cast to float32
-            waveform, sr = torchaudio.load(path)  # -> CPU DoubleTensor
-            waveform = waveform.to(dtype=torch.float32)  # -> CPU FloatTensor
-
-            # 2) RESAMPLE on CPU if needed
+            waveform, sr = torchaudio.load(path)
             if sr != config.sr:
-                resampler = torchaudio.transforms.Resample(sr, config.sr)
-                waveform = resampler(waveform)  # still CPU FloatTensor
-
-            # 3) MONO mix-down on CPU
+                waveform = torchaudio.transforms.Resample(sr, config.sr)(waveform)
             if waveform.size(0) > 1:
-                waveform = waveform.mean(dim=0, keepdim=True)  # still CPU
+                waveform = waveform.mean(dim=0, keepdim=True)
 
-            # 4) APPLY wave_transforms on CPU
-            wave_cpu = self.wave_transforms(waveform.squeeze(0))  # -> CPU FloatTensor [time]
-            wave_cpu = wave_cpu.unsqueeze(0)  # -> CPU [1, time]
+            # apply wave transforms & spectrogram (exactly as in __getitem__)
+            wave = self.wave_transforms(waveform.squeeze(0)).unsqueeze(0)
+            melspec = torchaudio.transforms.MelSpectrogram(
+                sample_rate=config.sr,
+                n_fft=config.n_fft,
+                hop_length=config.hop_length,
+                n_mels=config.n_mels,
+                f_min=0.0,
+                f_max=config.sr / 2.0,
+            )(wave)
+            feat = torchaudio.transforms.AmplitudeToDB(stype='power')(melspec)
 
-            # 5) MOVE to GPU for spectrogram
-            wave = wave_cpu.to(device)  # -> GPU FloatTensor
-
-            # 6) MEL + DB on GPU
-            melspec = melspec_transform(wave)  # -> GPU [1, n_mels, T]
-            feat = db_transform(melspec)  # -> GPU [1, n_mels, T]
-
-            # 7) ACCUMULATE stats (back on CPU via .item())
-            sum_ += feat.sum().item()
+            # accumulate
+            sum_   += feat.sum().item()
             sum_sq += (feat ** 2).sum().item()
-            count += feat.numel()
+            count  += feat.numel()
 
-        # 8) FINALIZE mean/std and return as GPU tensors
         mean = sum_ / count
-        var = sum_sq / count - mean ** 2
-        std = float(var ** 0.5)
+        var  = sum_sq / count - mean**2
+        std  = float(var**0.5)
 
-        return (
-            torch.tensor(mean, device=device).view(1, 1, 1),
-            torch.tensor(std, device=device).view(1, 1, 1)
-        )
+        # return as tensors [1,1,1] so they broadcast over [1, n_mels, T]
+        return torch.tensor(mean).view(1,1,1), torch.tensor(std).view(1,1,1)
 
 def get_global_stats(data_path):
     res = []

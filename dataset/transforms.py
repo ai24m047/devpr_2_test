@@ -170,8 +170,3 @@ class TimeMask():
 
     def __call__(self, wave):
         return self.addTimeMask(wave)
-
-
-
-
-

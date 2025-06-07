@@ -118,7 +118,7 @@ class AudioResNet12(nn.Module):
         n_mels: int,
         time_frames: int,
         num_classes: int,
-        blocks_per_stage: int = 1,
+        blocks_per_stage: int = 2,
     ):
         """
         Args:
