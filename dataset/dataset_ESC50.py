@@ -54,7 +54,7 @@ def download_progress(current, total, width=80):
 
 class ESC50(data.Dataset):
 
-    def __init__(self, root, test_folds=frozenset((1,)), subset="train", global_mean_std=(0.0, 1.0), download=False):
+    def __init__(self, root, test_folds=frozenset((1,)), subset="train", compute_stats: bool=False,  download=False):
         audio = 'ESC-50-master/audio'
         root = os.path.normpath(root)
         audio = os.path.join(root, audio)
@@ -123,8 +123,12 @@ class ESC50(data.Dataset):
                 torch.Tensor,
                 partial(torch.unsqueeze, dim=0),
             )
-        self.global_mean = global_mean_std[0]
-        self.global_std = global_mean_std[1]
+        self.global_mean = None
+        self.global_std = None
+
+        if compute_stats:
+            self.global_mean, self.global_std = self._compute_global_stats()
+
         self.n_mfcc = config.n_mfcc if hasattr(config, "n_mfcc") else None
 
     def __len__(self):
@@ -225,6 +229,48 @@ class ESC50(data.Dataset):
 
         return file_name, feat, class_id
 
+    def _compute_global_stats(self):
+        """
+        Compute mean & std of the *static* log-Mel feature over all
+        *training* files in this fold (before delta stacking).
+        Returns two scalars that can broadcast over [1, n_mels, T].
+        """
+        sum_ = 0.0
+        sum_sq = 0.0
+        count = 0
+
+        # iterate only over training subset
+        for fname in tqdm(self.file_names, desc="Calc mean/std"):
+            path = os.path.join(self.root, fname)
+            waveform, sr = torchaudio.load(path)
+            if sr != config.sr:
+                waveform = torchaudio.transforms.Resample(sr, config.sr)(waveform)
+            if waveform.size(0) > 1:
+                waveform = waveform.mean(dim=0, keepdim=True)
+
+            # apply wave transforms & spectrogram (exactly as in __getitem__)
+            wave = self.wave_transforms(waveform.squeeze(0)).unsqueeze(0)
+            melspec = torchaudio.transforms.MelSpectrogram(
+                sample_rate=config.sr,
+                n_fft=config.n_fft,
+                hop_length=config.hop_length,
+                n_mels=config.n_mels,
+                f_min=0.0,
+                f_max=config.sr / 2.0,
+            )(wave)
+            feat = torchaudio.transforms.AmplitudeToDB(stype='power')(melspec)
+
+            # accumulate
+            sum_   += feat.sum().item()
+            sum_sq += (feat ** 2).sum().item()
+            count  += feat.numel()
+
+        mean = sum_ / count
+        var  = sum_sq / count - mean**2
+        std  = float(var**0.5)
+
+        # return as tensors [1,1,1] so they broadcast over [1, n_mels, T]
+        return torch.tensor(mean).view(1,1,1), torch.tensor(std).view(1,1,1)
 
 def get_global_stats(data_path):
     res = []

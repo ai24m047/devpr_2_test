@@ -15,10 +15,10 @@ test_folds = [1, 2, 3, 4, 5]
 
 # sampling rate for waves
 sr = 44100
-n_mels = 128
+n_mels = 64
 hop_length = 512
 #n_mfcc = 42
-n_fft=1024
+n_fft=512
 # The number of time‐bins in the final spectrograms.
 # With sr=44100, hop_length=512, 5 seconds audio ≈ floor((44100*5)/512) = 430 frames; round up to 431 if padded to full.
 time_frames = 431
@@ -32,7 +32,7 @@ val_size = .2  # could be changed
 # device_id = 0 # no longer needed after adjustments for multi gpu use
 batch_size = 64
 # in Colab to avoid Warning
-num_workers = 8
+num_workers = 4
 # for local Windows or Linux machine
 # num_workers = 6#16
 persistent_workers = True
@@ -42,9 +42,9 @@ prefetch_factor=4,     # fetch 2 batches ahead
 epochs = 80 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
 #epochs = 1
 # early stopping after epochs with no improvement
-patience = 10 # i have no patience, so far most have stopped improving around 60-70
-lr = 3e-4
-weight_decay = 2e-3
+patience = 13 # i have no patience, so far most have stopped improving around 60-70
+lr = 1e-3
+weight_decay = 1e-4
 warm_epochs = 10
 gamma = 0.9 # more gentle decay
 step_size = 5

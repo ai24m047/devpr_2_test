@@ -10,7 +10,7 @@ from tqdm import tqdm
 import sys
 from functools import partial
 from torch.optim import AdamW
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import GradScaler, autocast
 
 from models.model_classifier import AudioResNet12
 from models.utils import EarlyStopping, Tee
@@ -19,11 +19,11 @@ import config
 
 
 # mean and std of train data for every fold
-global_stats = np.array([[-54.364834, 20.853344],
-                         [-54.279022, 20.847532],
-                         [-54.18343, 20.80387],
-                         [-54.223698, 20.798292],
-                         [-54.200905, 20.949806]])
+#global_stats = np.array([[-54.364834, 20.853344],
+#                         [-54.279022, 20.847532],
+#                         [-54.18343, 20.80387],
+#                         [-54.223698, 20.798292],
+#                         [-54.200905, 20.949806]])
 
 # evaluate model on different testing data 'dataloader'
 def test(model, dataloader, criterion, device):
@@ -68,7 +68,7 @@ def train_epoch():
         y_true = label.to(device)
 
      # ---- Forward pass under autocast ----
-        with autocast():
+        with autocast("cuda"):
             y_prob = model(x)
             loss = criterion(y_prob, y_true)
 
@@ -171,10 +171,14 @@ if __name__ == "__main__":
         with Tee(os.path.join(experiment, 'train.log'), 'w', 1, encoding='utf-8',
                  newline='\n', proc_cr=True):
             # this function assures consistent 'test_folds' setting for train, val, test splits
-            get_fold_dataset = partial(ESC50, root=data_path, download=True,
-                                       test_folds={test_fold}, global_mean_std=global_stats[test_fold - 1])
+            #get_fold_dataset = partial(ESC50, root=data_path, download=True,
+            #                           test_folds={test_fold}, global_mean_std=global_stats[test_fold - 1])
 
-            train_set = get_fold_dataset(subset="train")
+            base_args = dict(root=data_path,
+                             download=True,
+                             test_folds={test_fold})
+
+            train_set = ESC50(subset="train", compute_stats=True, **base_args)
             print('*****')
             print(f'train folds are {train_set.train_folds} and test fold is {train_set.test_folds}')
             print('random wave cropping')
@@ -188,7 +192,14 @@ if __name__ == "__main__":
                                                        pin_memory=True,
                                                        )
 
-            val_loader = torch.utils.data.DataLoader(get_fold_dataset(subset="val"),
+            val_set = ESC50(subset="val",
+                            compute_stats=False,
+                            **base_args)
+
+            val_set.global_mean = train_set.global_mean
+            val_set.global_std = train_set.global_std
+
+            val_loader = torch.utils.data.DataLoader(val_set,
                                                      batch_size=config.batch_size,
                                                      shuffle=False,
                                                      num_workers=config.num_workers,
@@ -229,10 +240,17 @@ if __name__ == "__main__":
             fit_classifier()
 
             # tests
-            test_loader = torch.utils.data.DataLoader(get_fold_dataset(subset="test"),
+            test_set = ESC50(subset="test",
+                             compute_stats=False,
+                             **base_args)
+
+            test_set.global_mean = train_set.global_mean
+            test_set.global_std = train_set.global_std
+
+            test_loader = torch.utils.data.DataLoader(test_set,
                                                       batch_size=config.batch_size,
                                                       shuffle=False,
-                                                      num_workers=0,  # config.num_workers,
+                                                      num_workers=config.num_workers,
                                                       drop_last=False,
                                                       )
 
