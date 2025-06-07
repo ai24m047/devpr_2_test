@@ -32,11 +32,13 @@ val_size = .2  # could be changed
 # device_id = 0 # no longer needed after adjustments for multi gpu use
 batch_size = 64
 # in Colab to avoid Warning
-num_workers = 2
+num_workers = 8
 # for local Windows or Linux machine
 # num_workers = 6#16
 persistent_workers = True
 pin_memory=True
+prefetch_factor=4,     # fetch 2 batches ahead
+
 epochs = 80 # model + optimizer combo apparently does not need that many epochs, usually converges earlier
 #epochs = 1
 # early stopping after epochs with no improvement
