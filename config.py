@@ -30,7 +30,7 @@ model_constructor = "AudioResNet12(n_mels=config.n_mels, time_frames=config.time
 # ratio to split off from training data
 val_size = .2  # could be changed
 # device_id = 0 # no longer needed after adjustments for multi gpu use
-batch_size = 64
+batch_size = 128
 # in Colab to avoid Warning
 num_workers = 4
 # for local Windows or Linux machine
@@ -44,7 +44,7 @@ epochs = 80 # model + optimizer combo apparently does not need that many epochs,
 # early stopping after epochs with no improvement
 patience =12 # i have no patience, so far most have stopped improving around 60-70
 lr = 3e-4
-weight_decay = 1e-4
+weight_decay = 5e-4
 warm_epochs = 10
 gamma = 0.9 # more gentle decay
 step_size = 5
