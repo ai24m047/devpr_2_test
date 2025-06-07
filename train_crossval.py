@@ -11,7 +11,7 @@ from tqdm import tqdm
 import sys
 from functools import partial
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR, SequentialLR
 from torch.amp import GradScaler, autocast
 
 from models.model_classifier import AudioResNet12
@@ -240,10 +240,27 @@ if __name__ == "__main__":
             # instantiate GradScaler for AMP implementation
             scaler = GradScaler()
 
-            scheduler = CosineAnnealingLR(
+            # … after you define optimizer and scaler …
+
+            # 1. Warm-up schedule: multiply LR by `gamma` every `step_size` epochs
+            warmup_scheduler = StepLR(
                 optimizer,
-                T_max=config.epochs,  # one full cosine cycle over all epochs
-                eta_min=1e-6  # end-of-schedule minimum LR
+                step_size=config.step_size,  # e.g. every 5 epochs
+                gamma=config.gamma,  # e.g. multiply by 0.9
+            )
+
+            # 2. Cosine annealing schedule: from config.lr → eta_min over the remaining epochs
+            cosine_scheduler = CosineAnnealingLR(
+                optimizer,
+                T_max=(config.epochs - config.warm_epochs),
+                eta_min=1e-6,
+            )
+
+            # 3. Chain them: use warmup for the first `warm_epochs`, then switch to cosine
+            scheduler = SequentialLR(
+                optimizer,
+                schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[config.warm_epochs],
             )
 
             # fit the model using only training and validation data, no testing data allowed here
