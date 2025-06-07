@@ -100,7 +100,9 @@ class ESC50(data.Dataset):
                 torch.Tensor,
                 # you can still add RandomScale or other wave-domain augs here
                 transforms.RandomPadding(out_len=out_len),
-                transforms.RandomCrop(out_len=out_len)
+                transforms.RandomCrop(out_len=out_len),
+                transforms.RandomScale(max_scale=1.2),
+                transforms.RandomNoise(min_noise=0.002, max_noise=0.02)
             )
 
             # === spec_transforms for training: add SpecAugment ===
