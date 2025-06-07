@@ -15,7 +15,7 @@ import torch.nn.functional as F
 #      modules and a 2×2 MaxPool to downsample.                                 #
 #   4. A final classifier head that global-pools and outputs `num_classes`     #
 #                                                                              #
-# Input shape: (batch_size, 1, n_mels, time_frames)                             #
+# Input shape: (batch_size, 3, n_mels, time_frames)                             #
 # Output shape: (batch_size, num_classes)                                      #
 ################################################################################
 
@@ -106,7 +106,7 @@ class BasicBlock(nn.Module):
 
 class AudioResNet12(nn.Module):
     """
-    A ResNet-12-style CNN for single-channel spectrogram inputs:
+    A ResNet-12-style CNN for spectogram inputs with dynamic channels:
       - Four “stages,” each stage = BasicBlock × N, followed by 2×2 MaxPool.
       - Channel progression:      1 → 64 → 128 → 256 → 512
       - After the last stage, we do a global average pool over the remaining
@@ -129,14 +129,14 @@ class AudioResNet12(nn.Module):
         """
         super(AudioResNet12, self).__init__()
 
-        # We assume input has shape (B, 1, n_mels, time_frames).
+        # We assume input has shape (B, 3, n_mels, time_frames).
 
         # ----------------------------------------------------------------------
         # (1) Initial convolution: expand 1 channel → 64 channels, keep spatial dims
         # ----------------------------------------------------------------------
         self.in_channels = 64
         self.conv1 = nn.Conv2d(
-            in_channels=1,
+            in_channels=3,
             out_channels=self.in_channels,
             kernel_size=3,
             stride=1,
@@ -224,7 +224,7 @@ class AudioResNet12(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Input x: (B, 1, n_mels, time_frames)
+        Input x: (B, 3, n_mels, time_frames)
         Output: (B, num_classes)
         """
         # ----------------------------------------------------------------------

@@ -9,6 +9,7 @@ from functools import partial
 import numpy as np
 
 import torchaudio
+from torchaudio.functional import compute_deltas
 import config
 from . import transforms
 
@@ -211,6 +212,16 @@ class ESC50(data.Dataset):
         # Now `feat` is already a FloatTensor with shape [1, n_mels, T] (or [1, n_mfcc, T]).
         if self.global_mean is not None:
             feat = (feat - self.global_mean) / self.global_std
+
+        # --- (8) Compute first‐ and second‐order deltas ---
+        # feat: [1, n_mels, T] → delta1: same shape
+        delta1 = compute_deltas(feat)
+        # then delta2 from delta1
+        delta2 = compute_deltas(delta1)
+
+        # --- (9) Stack into 3 channels: [3, n_mels, T] ---
+        # static, Δ, and Δ²
+        feat = torch.cat([feat, delta1, delta2], dim=0)
 
         return file_name, feat, class_id
 
