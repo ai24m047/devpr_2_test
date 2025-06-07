@@ -20,7 +20,7 @@ if __name__ == "__main__":
     reproducible = False
     data_path = config.esc50_path
     use_cuda = torch.cuda.is_available()
-    device = torch.device(f"cuda:{config.device_id}" if use_cuda else "cpu")
+    device = torch.device("cuda:0" if use_cuda else "cpu")
 
     check_data_reproducibility = False
     if reproducible:
@@ -47,6 +47,10 @@ if __name__ == "__main__":
     print('*****')
     print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     model = make_model()
+    # same multi-GPU wrap as in training
+    if use_cuda and torch.cuda.device_count() > 1:
+        print("Wrapping model in DataParallel for testing")
+        model = nn.DataParallel(model)
     model = model.to(device)
     print('*****')
 

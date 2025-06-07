@@ -29,7 +29,7 @@ model_constructor = "AudioResNet12(n_mels=config.n_mels, time_frames=config.time
 # ###TRAINING
 # ratio to split off from training data
 val_size = .2  # could be changed
-device_id = 0
+# device_id = 0 # no longer needed after adjustments for multi gpu use
 batch_size = 64
 # in Colab to avoid Warning
 num_workers = 2

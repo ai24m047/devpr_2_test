@@ -139,7 +139,14 @@ def make_model():
 if __name__ == "__main__":
     data_path = config.esc50_path
     use_cuda = torch.cuda.is_available()
-    device = torch.device(f"cuda:{config.device_id}" if use_cuda else "cpu")
+    if use_cuda:
+        # if CUDA is available, let DataParallel use ALL GPUs
+        n_gpus = torch.cuda.device_count()
+        device = torch.device("cuda:0")
+        print(f"Found {n_gpus} GPU(s).")
+    else:
+        n_gpus = 0
+        device = torch.device("cpu")
 
     # digits for logging
     float_fmt = ".3f"
@@ -192,7 +199,11 @@ if __name__ == "__main__":
             print()
             # instantiate model
             model = make_model()
-            # model = nn.DataParallel(model, device_ids=config.device_ids)
+            # if we have 2+ GPUs, wrap in DataParallel
+            if use_cuda and n_gpus > 1:
+                print("Wrapping model in DataParallel")
+                model = nn.DataParallel(model)
+            # move to device (DataParallel will scatter on its own)
             model = model.to(device)
             print('*****')
 
