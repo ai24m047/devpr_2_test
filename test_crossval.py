@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
     # instantiate model
     print('*****')
-    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
+    #print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     model = make_model()
     # same multi-GPU wrap as in training
     if use_cuda and torch.cuda.device_count() > 1:

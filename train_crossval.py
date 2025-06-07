@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sympy.abc import alpha
 from torch.utils.data import dataloader
 import pandas as pd
 import numpy as np
@@ -10,11 +11,12 @@ from tqdm import tqdm
 import sys
 from functools import partial
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
 from torch.amp import GradScaler, autocast
 
 from models.model_classifier import AudioResNet12
 from models.utils import EarlyStopping, Tee
+from models.utils import mixup_data, mixup_criterion
 from dataset.dataset_ESC50 import ESC50
 import config
 
@@ -67,11 +69,15 @@ def train_epoch():
     for _, x, label in tqdm(train_loader, unit='bat', disable=config.disable_bat_pbar, position=0):
         x = x.float().to(device)
         y_true = label.to(device)
+        # apply mixup
+        x, y_a, y_b, lam = mixup_data(x, y_true, alpha=0.3, device=device)
 
      # ---- Forward pass under autocast ----
         with autocast("cuda"):
             y_prob = model(x)
-            loss = criterion(y_prob, y_true)
+            # loss = criterion(y_prob, y_true)
+            # use mixup criterion for loss
+            loss = mixup_criterion(criterion, y_prob, y_a, y_b, lam)
 
     # ---- Backward + optimizer step via GradScaler ----
         optimizer.zero_grad()
@@ -162,7 +168,7 @@ if __name__ == "__main__":
     # expensive!
     #global_stats = get_global_stats(data_path)
     # for spectrograms
-    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
+    # print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     for test_fold in config.test_folds:
         experiment = os.path.join(experiment_root, f'{test_fold}')
         if not os.path.exists(experiment):
@@ -220,7 +226,8 @@ if __name__ == "__main__":
             print('*****')
 
             # Define a loss function and optimizer
-            criterion = nn.CrossEntropyLoss().to(device)
+            # add label-smoothing to soften hard targets to prevent over confidence
+            criterion = nn.CrossEntropyLoss(label_smoothing=0.1).to(device)
 
             optimizer = AdamW(
                 model.parameters(),
@@ -232,10 +239,13 @@ if __name__ == "__main__":
             # instantiate GradScaler for AMP implementation
             scaler = GradScaler()
 
-            scheduler = CosineAnnealingLR(
+            scheduler = SequentialLR(
                 optimizer,
-                T_max=config.epochs,  # one full cosine cycle over all epochs
-                eta_min=1e-6  # end-of-schedule minimum LR
+                schedulers=[
+                    LinearLR(optimizer, start_factor=1e-2, total_iters=config.warm_epochs),
+                    CosineAnnealingLR(optimizer, T_max=config.epochs - config.warm_epochs, eta_min=1e-6)
+                ],
+                milestones=[config.warm_epochs]
             )
 
             # fit the model using only training and validation data, no testing data allowed here
