@@ -148,13 +148,12 @@ class ESC50(data.Dataset):
         # --- (1) Load audio with torchaudio ---
         # torchaudio.load returns a Tensor [channels, time] and its sample rate.
         waveform, orig_sr = torchaudio.load(path)  # shape: [channels, time]
-        waveform = waveform.to(device=device, dtype=torch.float32)
+        waveform = waveform.to(torch.float32)  # still on CPU
 
         # If the audio was recorded at a different sample rate, resample to config.sr:
         if orig_sr != config.sr:
             resampler = torchaudio.transforms.Resample(orig_freq=orig_sr, new_freq=config.sr)
-            resampler = resampler.to(device)
-            waveform = resampler(waveform)  # still shape [channels, time]
+            waveform = resampler(waveform)  # CPU resample
 
         # --- (2) Convert to mono if multi-channel ---
         # If there is more than 1 channel, just take the mean of channels.
@@ -176,8 +175,7 @@ class ESC50(data.Dataset):
         # --- (4) Apply existing "wave_transforms" pipeline on GPU ---
         wave_cpu = waveform.clone().squeeze(0)  # [time] on CPU
         wave_cpu = self.wave_transforms(wave_cpu)  # still CPU
-        wave_cpu = wave_cpu.unsqueeze(0)  # [1, time] on CPU
-        wave = wave_cpu.to(device)  # MOVE to GPU
+        wave = wave_cpu.unsqueeze(0)  # [1, time], still on CPU
 
         # --- (5) Label extraction: exactly as before ---
         base = file_name.split('.')[0]
@@ -266,17 +264,17 @@ class ESC50(data.Dataset):
         for fname in tqdm(self.file_names, desc="Calc mean/std"):
             path = os.path.join(self.root, fname)
             waveform, sr = torchaudio.load(path)
-            waveform = waveform.to(device, dtype=torch.float32)
+            waveform = waveform.to(torch.float32)
 
             if sr != config.sr:
-                resampler = torchaudio.transforms.Resample(sr, config.sr).to(device)
+                resampler = torchaudio.transforms.Resample(sr, config.sr)
                 waveform = resampler(waveform)
 
             if waveform.size(0) > 1:
                 waveform = waveform.mean(dim=0, keepdim=True)
 
-            # GPU wave transforms
-            wave = self.wave_transforms(waveform.squeeze(0)).unsqueeze(0).to(device)
+            # wave transforms
+            wave = self.wave_transforms(waveform.squeeze(0)).unsqueeze(0)
 
             # GPU mel + dB
             feat = db_t(melspec_t(wave))
